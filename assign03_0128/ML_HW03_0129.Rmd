@@ -1,0 +1,216 @@
+---
+title: "ML_HW03_0129"
+author: "Yifan (Crystal) CAI"
+date: "2023-01-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r 00}
+library(readr)
+library(purrr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(moments)
+library(caret)
+library('DAAG')
+library('glmnet')
+library(plyr)
+library('reader')
+library(dplyr)
+library(caret)
+library(ggplot2)
+library(repr)
+```
+
+### Q1
+**Answer** : I will first delete the columns with almost all missing values as they are meaningless in analysis, then I will replace NAs with the column means for other columns. I will check the skewness of the original dataset, training set and test set for the the treated observations to check whether the distributions are balanced.  
+```{r 01}
+heart <- read_csv("heart.csv")
+#Descriptive Statistics 
+summary(heart)
+
+#Identify missing values 
+#These columns are of almost all NAs -> drop these columns 
+sum(is.na(heart$family_record))
+sum(is.na(heart$past_record))
+sum(is.na(heart$wrist_dim...15))
+
+Variables_NA  = c('family_record','past_record','wrist_dim...15')
+heart_new <- heart[,!names(heart) %in% Variables_NA]
+
+#There are other columns with several NAs so I replace NAs with the average of the columns. 
+heart_new <- replace_na(heart_new, lapply(heart_new, mean, na.rm = TRUE))
+
+#Check distribution of all variables 
+heart_new %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+#The data points of heart attack distributes randomly 
+plot(heart_new$heart_attack)
+```
+#### 2). 
+```{r 02}
+#Split train and test set of dataset.
+set.seed(522)
+#use 70% of dataset as training set and 30% as test set
+sample <- sample(c(TRUE, FALSE), nrow(heart_new), replace=TRUE, prob=c(0.8,0.2))
+train  <- heart_new[sample, ]
+test   <- heart_new[!sample, ]
+
+### Full linear regression model
+model <- lm(heart_attack~., data = train)
+summary(model)
+
+### Calculate OOS R^2
+#Make prediction of heart attack probability based on the model 
+prediction <- predict(model, newdata = test)
+## Get the OOS null deviance
+OOS_null_deviance <- sum((test$heart_attack - mean(test$heart_attack))^2)
+# Get the OOS residual deviance 
+OOS_res_deviance <- sum((test$heart_attack- prediction)^ 2)
+## Calculate OOS R-squared
+OOS_R_squared <- 1 - (OOS_res_deviance / OOS_null_deviance)
+OOS_R_squared #0.933342
+```
+**Interpretation of Model** :<br>
+There are overall 10 variables that are statistically significant at 0.05 significance level. weight, neck_dim, chest_dim, abdom_dim, hip_dim, thigh_dim and ankle_dim are weakly positively correlated with probability of heart attack; height, fat_free_wt, knee_dim are negatively correlated with probability of heart attack. <br>
+The OOS R-squared of the model is 0.933342. 
+
+
+### Q2 
+
+**Explaination of cross validation** :  <br>
+Cross Validation is a model evaluation method. It is the process of training model on a subset of dataset repeatedly. This process consists of the following steps : 1).dividing the dataset into several folds/subsets, 2).taking out one fold out of the dataset to train the model on, 3).placing the fold back to the dataset and 4).training the model on another fold taken from the dataset.  <br>
+The goal of cross validation is to be able to measure the out-of-sample performance of model while saving the cost of requiring extra datasets. 
+
+**Potential Problems** : <br>
+One potential problem of cross validation is that it's not a fully out-of-sample model evaluation method. As the fold of dataset that has been left out as test set will be put back to training set and used again as part of training set, the performance of model measured based on the this setup cannot be seen as fully out-of-sample performance. <br>
+Another problem of cross validation is that it's relatively time-consuming compared with in-sample measure, especially for cross validation method like Leave-one-out cross validation. When there is a large-sized dataset, fitting K times can become unfeasible even K in 5-10.<br>
+It can also be unstable. There can be large variability on the model chose when we do CV on many different samples. 
+
+### Q3 
+```{r 03}
+#specify the cross-validation method
+ctrl <- trainControl(method = "cv", number = 8)
+#fit a regression model and use k-fold CV to evaluate performance
+model_cv <- train(heart_attack~., data = train, method = "lm", trControl = ctrl)
+#view summary of k-fold CV               
+print(model_cv) 
+model_cv$results['Rsquared']
+#view final model
+model_cv$finalModel
+#view predictions for each fold
+model_cv$resample
+#OOS R^2
+OOS_R_squared_cv <- mean(model_cv$resample$Rsquared) #0.845123
+OOS_R_squared_cv
+``` 
+**Answer**:<br>
+The R^2 from the 8-fold cross-validation is 0.845123, which is larger than the R^2 0.933342 from question 1. 
+
+
+### Q4 
+**Explaination**: <br>
+Lasso (Least Absolute Shrinkage and Selection Operator) regression is a regularization technique for feature selection. Lasso procedure aims to result in sparse models with few coefficients and avoid model overfitting by adding penalties that is equal to penalty weight times the absolute value of the magnitude of the coefficient for each additional variable. <br>
+The goal is to minimize the following : <br>
+Lasso path = Residual Sum of Squares + λ * (Sum of the absolute value of the magnitude of coefficients), where λ denotes the penalty weights. = Σ(yi – ŷi)2 + λΣ|βj|<br>
+
+**How**: <br>
+We generate the following steps to select a value for λ that produces the lowest possible test MSE (mean squared error). 
+1). Set a sequence of penalties λ1,..., λt.  <br>
+2). For each of k = 1,...K folds,  <br>
+- Fit the path beta_1,..., beta_T on all data except fold k  <br>
+- Get the fitted deviance on left out data <br>
+This gives us K draws of OOS deviance for each λt. <br>
+3). Use the results to choose the best λ <br>
+4). then re-fit the model to all of the data by minimizing the lasso regression
+
+**Pros**:<br>
+1. It avoids model overfitting. <br>
+2. It also does feature selection more efficiently than stepwise selection (forward or backward selection) as it's automatic. <br>
+3. It has been found that Lasso produces the highest model prediction accuracy under the widest range of circumstance compared to stepwise selection. ("Extended Comparisons of Best Subset Selection, Forward Stepwise Selection, and the Lasso" by Hastie et al, 2017)
+
+**Cons**:<br>
+1. It's hard to interpret the selection result of model, for example, why lasso selects some features instead of other features?<br>
+2. When there are features highly correlated with each other, lasso may randomly select one of them into model. 
+
+
+### Q5 
+#### 1). 
+```{r 04}
+#define response variable
+train_y <- train$heart_attack
+#define matrix of predictor variables
+train_x <- data.matrix(train[1:16])
+#define response variable in test set
+test_y <-  test$heart_attack
+#define matrix of predictor variables in test set
+test_x <- data.matrix(test[1:16])
+
+#Fit lasso regression
+lasso_cv <- cv.glmnet(train_x, train_y, alpha=1)
+#Pproduce plot of test MSE by lambda value
+plot(lasso_cv) 
+
+#1. Find the lambda value that minimizes average OOS deviance
+lambda_min <- lasso_cv$lambda.min
+lambda_min
+# Find the model based on lambda_min
+model_lambda_min <- glmnet(x = train_x, y = train_y, alpha = 1, lambda = lambda_min)
+coef(model_lambda_min)
+# Use lasso regression model to predict response value
+predictions_min <- predict(model_lambda_min, s = lambda_min, newx = test_x)
+# Get the OOS residual deviance 
+OOS_res_deviance_min <- sum((test$heart_attack - predictions_min)^ 2)
+## Calculate OOS R-squared
+OOS_R_squared_min <- 1 - (OOS_res_deviance_min / OOS_null_deviance)
+OOS_R_squared_min #0.8834594
+
+
+#2. Find the biggest lambda with average OOS deviance no more than 1SD away from the minimum
+lambda_1se <- lasso_cv$lambda.1se
+lambda_1se
+# Find the model based on lambda_1se
+model_lambda_1se <- glmnet(x = train_x, y = train_y, alpha = 1, lambda = lambda_1se)
+coef(model_lambda_1se)
+# Use lasso regression model to predict response value
+predictions_1se <- predict(model_lambda_1se, s = lambda_1se, newx = test_x)
+# Get the OOS residual deviance 
+OOS_res_deviance_1se <- sum((test$heart_attack - predictions_1se)^ 2)
+## Calculate OOS R-squared
+OOS_R_squared_1se <- 1 - (OOS_res_deviance_1se / OOS_null_deviance)
+OOS_R_squared_1se #0.8692755
+``` 
+**Explanation** :<br>
+#The model with lambda_min keeps chest_dim, abdom_dim, hip_dim, thigh_dim and biceps_dim in the model; The model with lambda_1se keeps chest_dim, abdom_dim, hip_dim and thigh_dim in the model. The model with lambda_1se has a higher R^2 (0.8834594 > 0.8692755) compared to model with lambda_1se. Therefore, I will choose model with lambda_1se. 
+
+#### 2).
+```{r 05}
+#R^2 for model in Q1 
+OOS_R_squared #0.933342
+
+#R^2 for model in Q3
+OOS_R_squared_cv #0.845123
+
+#R^2 for model in Q5
+OOS_R_squared_min #0.8834594
+``` 
+
+**Comparison**: Model in Q1 has the highest R^2 (0.933342), Model in Q3 has the lowest R^2 (0.845123). 
+
+### Q6 <br>
+**Answer**: <br>
+AIC (Akaike’s Information Criterion) is a in-sample statistic measure that approximates OOS deviance. <br>
+It's calculated as "Deviance + 2df", where df is the degree of freedom used in model fit. The higher AIC is, the better the model fits. <br>
+AIC overfits in high dimensions because in big data, df(number of parameters) can be huge, so df almost equals to sample size. In this case, AIC is a bad approximation, therefore, we use AIC corrected (AICc).  <br>
+AICc is calculated as "Deviance + 2df * (n/n-df-1)". 
+
+
