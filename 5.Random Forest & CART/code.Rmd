@@ -1,0 +1,105 @@
+---
+title: "Homework 06"
+author: "Yifan(Crystal)CAI"
+date: "2023-02-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Question 01 : PCA (Principal Component Analysis) is an unsupervised ML method that is often used to reduce dimentionality of large data sets. <br>
+
+#### 1) Please explain how PCA can be used to reduce the number of variables. <br>
+**Answer:** <br>
+PCA can be used to reduce the number of variables by identifying the directions of greatest variation in the data and then projecting the data onto a new set of coordinates based on these directions. These new coordinates are called principal components, and they capture the maximum amount of variation in the data using fewer variables than the original dataset. By selecting only the principal components that account for a significant amount of the variation in the data, we can reduce the number of variables, therefore, reduce dimensionality of the original data.
+
+#### 2) Please highlight limitations of PCA.<br>
+**Answer:** <br>
+1. PCA works by transforming the original variables into a smaller set of variables that are linear combinations of the original variables. Therefore, these variables (principle components) have no realistic meaning by themselves. As a result, it will be difficult to interpret and explain the meaning of the model. <br>
+2. PCA is based on linear transformations, which means it may not capture non-linear relationships between variables in the data. <br>
+3. PCA is sensitive to outliers in the data as outliers can distort the direction and magnitude of the principal components, leading to a misrepresentation of the variation in the data.<br>
+4. PCA is sensitive to the scale of the variables in the data. Variables with larger scales will dominate the principal components, regardless of their importance to the underlying structure of the data.  <br>
+
+### Question 02 : Trees are supervised algorithms that can be used for both regression and classification tasks. For the following trees, please explain how it is grown (i.e., how to select the variables to split on at each node) <br>
+
+#### 1) Classification Tree <br>
+**Answer : ** <br>
+A classification tree is grown by partitioning the data into homogeneous subsets based on the values of the input variables. The goal is to create a tree where the terminal nodes (or leaves) contain groups of data points that belong to the same class or mostly similar to each other. <br>
+To achieve this, the algorithm selects the input variable that best splits the data into purest subsets based on a certain criterion. The splitting process continues until a stopping criterion is met, such as a maximum tree depth, a minimum number of samples in each leaf, or no further significant improvement in the model's performance. <br>
+
+#### 2) Regression Tree <br>
+**Answer : ** <br>
+A regression tree is grown in a similar way to a classification tree but is used for predicting a continuous response variable instead of a categorical one. The tree is constructed by partitioning the data into homogeneous subsets based on the values of the input variables. The goal is to create a tree where the terminal nodes contain groups of data points with similar response values.  <br>
+To achieve this, the algorithm selects the input variable that best splits the data into purest subsets based on a certain criterion such as the mean squared error or the mean absolute error. The splitting process continues until a stopping criterion is met, such as a maximum tree depth, a minimum number of samples in each leaf, or no further significant improvement in the model's performance.  <br>
+
+
+### Question 03 : Please explain how a tree is pruned? <br>
+**Answer:**<br>
+Tree pruning is a technique used to reduce the complexity of a decision tree and prevent overfitting by removing branches that do not contribute to its accuracy or performance. <br>
+Starting from the leaves of the tree, each node is removed along with its branches, and the model's accuracy is evaluated. If the model's accuracy does not decrease significantly after removing the node, the node is pruned. This process is repeated for each node in the tree, and the accuracy is evaluated after each pruning operation. After pruning, a series of decision trees of different sizes and complexities are created. The optimal pruning level is chosen by selecting the tree with the best performance on the validation set. This could be the tree with the highest classification accuracy or the lowest mean squared error or mean absolute error. <br>
+
+### Question 04 : Please explain why a Random Forest usually outperforms regular regression methods (such as linear regression, logistic regression, and lasso regression). <br>
+
+1. Random Forest automatically takes interaction of variables into consideration while we need to select variable and set up ways of interactions between different variables in other regression methods <br>
+2. Random Forest can capture non-linear relationships between the input variables and the output variable. <br>
+2. Random Forest provides information on the importance of each input variable in making predictions. This information can be used to select the most relevant input variables and remove irrelevant ones. <br>
+3. Random Forest is an ensemble learning method that combines multiple decision trees to create a more robust and accurate model. By aggregating the predictions of multiple decision trees, Random Forest can reduce the risk of overfitting and improve the accuracy of the predictions.<br>
+
+### Question 05 : Use the Trasaction.csv dataset to create payment default classifier ('payment_default ' column) and explain your output using:<br>
+#### 1) Classification Tree (CART)
+```{r}
+library(readr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+transactions <- read_csv("Transaction.csv")
+transactions$payment_default <- as.factor(transactions$payment_default) 
+#Split train and test set of dataset.
+set.seed(522)
+#use 80% of dataset as training set and 20% as test set
+sample <- sample(c(TRUE, FALSE), nrow(transactions), replace=TRUE, prob=c(0.8,0.2))
+train  <- transactions[sample, ]
+test   <- transactions[!sample, ] 
+
+# Use the train() function to create the model
+cart_model <- rpart(payment_default ~.,data = train, method = "class")                          
+
+# Plot the tree
+rpart.plot(cart_model)
+
+# Performance of model 
+cart_model_cm <- confusionMatrix(predict(cart_model,test,type = "class"), test$payment_default)
+cart_model_cm
+cart_model_accuracy <- cart_model_cm$overall[1]
+cat("The accuracy of the CART model is",cart_model_accuracy)
+```
+**Interpretation: ** <br>
+The accuracy of the CART model is 82.63%. The CART model uses PAY_0, PAY_6, BILL_AMT1 as key variables and has three splits. If PAY_0 is less than 1.5, then the model predicts that the person will not default, and this split applies to 21,516 observations. Of these, 83.5% did not default, and 16.5% did default. If PAY_0 is greater than or equal to 1.5, then the model further splits the data based on the value of the "PAY_6" variable. If PAY_6 is less than 1, the model predicts that the person will default, and this split applies to 1,508 observations. Of these, 35.5% did not default, and 64.5% did default. If PAY_6 is greater than or equal to 1, the model again predicts that the person will default, and this split applies to 1,015 observations. Of these, 23.1% did not default, and 76.9% did default.<br>
+
+
+#### 2) Random Forest
+```{r}
+library('randomForest')
+# Train a random forest model
+rf_model <- randomForest(payment_default~., data = train, ntree = 1000, metric = 'Accuracy', importance = TRUE)
+
+# Plot the tree
+plot(rf_model)
+
+# Plot the importance of variables 
+importance(rf_model)
+varImpPlot(rf_model)
+
+# Print out the details about the model
+rf_model_cm <- confusionMatrix(predict(rf_model,test), test$payment_default)
+rf_model_cm
+rf_model_accuracy <- rf_model_cm$overall[1]
+cat("The accuracy of the CART model is",rf_model_accuracy)
+```
+
+**Interpretation : ** <br>
+This random forest model had 500 trees. The above output displayed the confusion matrix of the payment default of the training data and the predicted payment default by the random forest model. The accuracy of the model is 81.53%. Based on plot of mean decreased accuracy and mean decreased Gini, we can find that PAY_0 is the most important variable in identifying whether the payment is default or not. <br>
+
+
