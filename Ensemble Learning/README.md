@@ -1,6 +1,6 @@
-This is a comprehensive introduction of Ensemble Learning Techniques.
+## This is a comprehensive introduction of Ensemble Learning Techniques.
 
-Main Contents of Models include : 
+### Main Contents of Models include : 
 
 Simple Ensemble Techniques
 1. Max Voting
