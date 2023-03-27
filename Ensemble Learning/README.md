@@ -2,12 +2,12 @@
 
 ### Main Contents of Models include : 
 
-Simple Ensemble Techniques
+#### Simple Ensemble Techniques
 1. Max Voting
 2. Averaging
 3. Weighted Averaging
 
-Complex Ensemble Techniques
+#### Complex Ensemble Techniques
 
 1.Bagging
 - Random Forest
