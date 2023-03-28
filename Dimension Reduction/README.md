@@ -10,10 +10,10 @@
 1. Features Selection
 2. PCA
 3. Regularization
-- Trade-off between bias and variance
-- (L1) Lasso Regression
-- (L2) Ridge Regression
-- (L1+L2) Elastic net regularization
-- Dropout (Neural Network)
-- Data Augmentation
-- Early Stopping
+  - Trade-off between bias and variance
+  - (L1) Lasso Regression
+  - (L2) Ridge Regression
+  - (L1+L2) Elastic net regularization
+  - Dropout (Neural Network)
+  - Data Augmentation
+  - Early Stopping
